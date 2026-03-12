@@ -1,0 +1,105 @@
+Курсовой проект
+Описание
+    В рамках проекта  необходимо будет реализовать чат-бота в VK или Telegram, который должен работать внутри чата на несколько человек. Чат-бот реализовывает механику из прикрепленного за вами варианта. Любые усовершенствования только поощряются. В конце игровой сессии бот должен выслать результат.
+
+Базовые требования к игре
+    Возможность управлять ботом должен иметь каждый участник беседы. Минимальный набор команд к боту из чата:
+Начать игру. Если идет сессия, начать новую нельзя.
+Остановить игру. При остановке должно произойти досрочное завершение игры и выведены результаты.
+Информация об игровой сессии. Бот должен выводить информацию о проведении конкурса. После завершения игры может выводиться информация о крайнем конкурсе.
+
+Задачи
+Для успешной сдачи и прохождения курса необходимо выполнить все задания без звездочек [*]
+
+Обязательные
+Реализовать чат-бота в социальной сети (Телеграмм).
+Реализовать механику. Бот должен поддерживать несколько бесед.
+Реализовать API администратора.
+Все состояния пользователей и игровых сессий должны храниться в СУБД Postgres.
+
+Дополнительные
+Покрыть тестами основную механику
+Покрыть тестами Admin API
+Любые улучшения и усложнения процесса игры приветствуются: различные механики начисления очков и т.д.
+Каждый микросервис приложения должен быть запущен в своем собственном Docker-контейнере. Для воспроизводимости сборки напишите файл docker-compose.yml.
+Разделить этапы получения сообщений из VK и саму логику приложения, используя брокер сообщений, например RabbitMQ для повышения отказоустойчивости всего приложения.
+Бот должен уметь переживать рестарт сервиса.
+Если процесс останавливается и перезапускается во время игровых сессий, он должен продолжиться с того момента, где прервался. Все таймеры и отложенные события должны возобновиться.
+Проект должен быть развернут на виртуальной машине в интернете с помощью docker-compose up. Образы должны скачиваться из внешнего registry. Их можно запушить в https://hub.docker.com или в Github — https://github.com/features/packages.
+Автоматически собирать образы проекта через Github Actions при push в репозиторий и раскладывать на удаленной машине.
+Покрыть тестами бота.
+
+Тема: Биржа
+Всем пользователям выдается равное число условных единиц на счет. Бот показывает возможные активы для покупки и их стоимость.
+Начинается торговая сессия. Пользователи покупают/продают ценные бумаги или пропускают ход.
+Торговая сессия заканчивается через определенное время, или если все игроки сигнализировали о завершении хода.
+Перед началом новой сессии бот пишет, как изменилась стоимость ценных бумаг на рынке
+Игра заканчивается, если:
+            a. В игре осталось меньше 2 игроков
+            b. Прошло заданное число торговых сессий
+            c.  Один из игроков сигнализировал о завершении игры
+
+Структура Базы данных:
+
+CREATE TABLE IF NOT EXISTS player (
+    player_id SERIAL PRIMARY KEY,
+    tg_id TEXT NOT NULL,
+    max_balance DOUBLE PRECISION DEFAULT 1000,
+    games_count INTEGER DEFAULT 0,
+    games_win INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS player_balance (
+	id SERIAL PRIMARY KEY,
+	player_id INTEGER NOT NULL,
+	game_id INTEGER NOT NULL,
+	full_balance DOUBLE PRECISION DEFAULT 1000,
+	pure_balance DOUBLE PRECISION DEFAULT 1000,
+	company_share_balance DOUBLE PRECISION DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS game (
+    game_id SERIAL PRIMARY KEY,
+    chat_id BIGINT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    game_status TEXT,
+    game_trading_session_round INTEGER,
+    max_rounds TEXT
+);
+
+CREATE TABLE IF NOT EXISTS game_player (
+	id SERIAL PRIMARY KEY,
+	game_id INTEGER NOT NULL,
+	player_id INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS company_shares(
+	company_share_id SERIAL PRIMARY KEY,
+	game_id INTEGER NOT NULL,
+	company_share_name TEXT NOT NULL,
+	company_share_price DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS player_company_share (
+	id SERIAL PRIMARY KEY,
+	player_id INTEGER NOT NULL,
+	game_id INTEGER NOT NULL,
+	company_share_id INTEGER NOT NULL,
+	company_share_count INTEGER DEFAULT 0
+);
+
+Ref: "player_company_share"."company_share_id" < "company_shares"."company_share_id"
+
+Ref: "game"."game_id" = "game_player"."game_id"
+
+Ref: "game_player"."player_id" < "player_company_share"."player_id"
+
+Ref: "game_player"."game_id" < "player_balance"."game_id"
+
+Ref: "game_player"."player_id" < "player_balance"."player_id"
+
+Ref: "game"."game_id" = "company_shares"."game_id"
+
+Ref: "player"."player_id" < "game_player"."player_id"
+
+Ref: "game_player"."game_id" < "player_company_share"."game_id"
