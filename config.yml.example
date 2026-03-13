@@ -1,0 +1,12 @@
+session:
+  key: YOUR_KEY
+bot:
+  token: YOUR_TOKEN
+admin: 
+  tg_id: YOUR_TG_ID
+database:
+  host: localhost
+  port: 5432
+  user: YOUR_USER
+  password: YOUR_PASSWORD
+  name: YOUR_DB_NAME
