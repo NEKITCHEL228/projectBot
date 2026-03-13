@@ -1,4 +1,12 @@
 from aiohttp.web import (Application as AiohttpApplication, Request as AiohttpRequest, View as AiohttpView)
+from app.backend.web.config import setup_config
+from app.backend.web.logger import setup_logging
+from app.backend.web.middlewares import setup_middlewares
+from app.backend.web.routes import setup_routes
+from app.backend.web.config import Config
+from app.backend.store.database import Database
+from app.backend.store import setup_store, Store
+
 
 class Application(AiohttpApplication):
     config: Config | None = None

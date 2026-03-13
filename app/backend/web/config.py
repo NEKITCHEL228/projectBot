@@ -48,7 +48,7 @@ def setup_config(app: "Application", config_path: str):
         session=SessionConfig(**config_dict["session"]),
         bot=BotConfig(
             token=config_dict["bot"]["token"],
-            admin=AdminConfig(tg_id=config_dict["bot"]["admin"]["tg_id"]),
+            admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"]),
         ),
         database=DatabaseConfig(**config_dict["database"]),
         admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"]),

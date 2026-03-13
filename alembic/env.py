@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -16,11 +17,33 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# Build DB URL from config.yml and inject into alembic config
+def _get_db_url() -> str:
+    import yaml
+    config_path = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+    with open(os.path.realpath(config_path)) as f:
+        raw = yaml.safe_load(f)
+    db = raw["database"]
+    return (
+        f"postgresql+asyncpg://{db['user']}:{db['password']}"
+        f"@{db['host']}:{db['port']}/{db['name']}"
+    )
+
+config.set_main_option("sqlalchemy.url", _get_db_url())
+
+# Import all models so their tables are registered in metadata
+from app.backend.game.models import (  # noqa: F401
+    CompanySharesModel,
+    GameModel,
+    GameUserModel,
+    UserBalanceModel,
+    UserCompanyShareModel,
+)
+from app.backend.user.models import UserModel  # noqa: F401
+
+from app.backend.store.database.sqlalchemy_base import BaseModel
+
+target_metadata = BaseModel.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
