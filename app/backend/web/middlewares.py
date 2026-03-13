@@ -3,9 +3,6 @@ import typing
 
 from aiohttp.web import middleware, Response
 from aiohttp.web_exceptions import HTTPException
-from aiohttp_session import setup as session_setup
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
-
 if typing.TYPE_CHECKING:
     from app.backend.web.app import Application
 
@@ -30,4 +27,3 @@ async def error_middleware(request, handler):
 
 def setup_middlewares(app: "Application") -> None:
     app.middlewares.append(error_middleware)
-    session_setup(app, EncryptedCookieStorage(app.config.session.key))

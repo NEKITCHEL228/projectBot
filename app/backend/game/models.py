@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    BigInteger
 )
 from sqlalchemy.orm import relationship
 
@@ -34,8 +35,8 @@ class GameModel(BaseModel):
         Index("ix_game_created_at", "created_at"),
     )
 
-    game_id = Column(Integer, primary_key=True, autoincrement=True)
-    chat_id = Column(Integer, nullable=False)
+    game_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    chat_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     game_status = Column(Enum(GameStatusEnum), nullable=False)
     game_trading_session_round = Column(Integer, default=0, nullable=False)
@@ -61,9 +62,9 @@ class GameUserModel(BaseModel):
         Index("ix_game_user_user_id", "user_id"),
     )
 
-    game_user_id = Column(Integer, primary_key=True, autoincrement=True)
-    game_id = Column(Integer, ForeignKey("game.game_id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
+    game_user_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    game_id = Column(BigInteger, ForeignKey("game.game_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("user.user_id"), nullable=False)
 
     game: "GameModel" = relationship("GameModel", back_populates="game_users")
     user: "UserModel" = relationship("UserModel", back_populates="game_users")
@@ -88,7 +89,7 @@ class CompanySharesModel(BaseModel):
     )
 
     company_share_id = Column(Integer, primary_key=True, autoincrement=True)
-    game_id = Column(Integer, ForeignKey("game.game_id", ondelete="CASCADE"), nullable=False)
+    game_id = Column(BigInteger, ForeignKey("game.game_id", ondelete="CASCADE"), nullable=False)
     company_share_name = Column(String, nullable=False)
     company_share_price = Column(Numeric(12, 2), nullable=False)
 
@@ -108,10 +109,10 @@ class UserCompanyShareModel(BaseModel):
 
     user_company_share_id = Column(Integer, primary_key=True, autoincrement=True)
     game_user_id = Column(
-        Integer, ForeignKey("game_user.game_user_id", ondelete="CASCADE"), nullable=False
+        BigInteger, ForeignKey("game_user.game_user_id", ondelete="CASCADE"), nullable=False
     )
     company_share_id = Column(
-        Integer, ForeignKey("company_shares.company_share_id"), nullable=False
+        BigInteger, ForeignKey("company_shares.company_share_id"), nullable=False
     )
     company_share_count = Column(Integer, default=0, nullable=False)
 
@@ -128,7 +129,7 @@ class UserBalanceModel(BaseModel):
 
     user_balance_id = Column(Integer, primary_key=True, autoincrement=True)
     game_user_id = Column(
-        Integer,
+        BigInteger,
         ForeignKey("game_user.game_user_id", ondelete="CASCADE"),
         nullable=False,
         unique=True,

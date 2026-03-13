@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 class Store:
     def __init__(self, app: "Application"):
+        self.app = app
         from app.backend.store.admin.accessor import AdminAccessor
         from app.backend.store.bot.manager import BotManager
         from app.backend.store.game.accessor import GameAccessor
@@ -17,7 +18,7 @@ class Store:
         self.bots_manager = BotManager(app)
         self.games = GameAccessor(app)
         self.users = UserAccessor(app)
-        self.tg_api = TgApiAccessor()
+        self.tg_api = TgApiAccessor(app)
 
 
 def setup_store(app: "Application"):

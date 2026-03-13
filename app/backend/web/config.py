@@ -4,10 +4,6 @@ from dataclasses import dataclass
 if typing.TYPE_CHECKING:
     from app.backend.web.app import Application
     
-
-@dataclass
-class SessionConfig:
-    key: str
     
 
 @dataclass
@@ -18,7 +14,6 @@ class AdminConfig:
 @dataclass
 class BotConfig:
     token: str
-    admin: AdminConfig
     
 
 @dataclass
@@ -32,7 +27,6 @@ class DatabaseConfig:
     
 @dataclass
 class Config:
-    session: SessionConfig
     bot: BotConfig
     database: DatabaseConfig
     admin: AdminConfig
@@ -45,11 +39,9 @@ def setup_config(app: "Application", config_path: str):
         config_dict = yaml.safe_load(config_file)
 
     app.config = Config(
-        session=SessionConfig(**config_dict["session"]),
         bot=BotConfig(
             token=config_dict["bot"]["token"],
-            admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"]),
         ),
         database=DatabaseConfig(**config_dict["database"]),
-        admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"]),
+        admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"], password=config_dict["admin"]["password"]),
     )

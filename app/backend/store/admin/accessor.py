@@ -10,7 +10,9 @@ class AdminAccessor(BaseAccessor):
         pass
 
     async def get_by_tg_id(self, tg_id: str):
-        pass
+        
+        
+        return None
 
     async def create_admin(self, tg_id: str):
         pass

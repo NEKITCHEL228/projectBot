@@ -21,7 +21,7 @@ class Poller:
     def start(self):
         self.is_running = True
 
-        self.poll_task = asyncio.create_task(self._poll())
+        self.poll_task = asyncio.create_task(self.poll())
         self.poll_task.add_done_callback(self._done_callback)
 
     async def stop(self) -> None:
