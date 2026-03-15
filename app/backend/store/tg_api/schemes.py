@@ -5,6 +5,16 @@ class Chat(BaseModel):
     
 class User(BaseModel):
     id: int
+    first_name: str
+    last_name: str | None = None
+    username: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        name = self.first_name
+        if self.last_name:
+            name += f" {self.last_name}"
+        return name
     
 class Message(BaseModel):
     message_id: int

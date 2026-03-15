@@ -1,3 +1,4 @@
+import asyncio
 from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -9,7 +10,7 @@ from app.backend.game.models import (
     GameStatusEnum,
 )
 if TYPE_CHECKING:
-    from aiohttp.web_app import Application
+    from app.backend.web.app import Application
 
 class GameAccessor(BaseAccessor):
     def __init__(self, app: "Application"):
@@ -70,3 +71,50 @@ class GameAccessor(BaseAccessor):
             if game:
                 game.game_status = GameStatusEnum.IN_PROGRESS
                 await session.commit()
+
+    async def finish_game(self, game_id: int) -> None:
+        """Переводит игру в статус finished."""
+        query = select(GameModel).where(GameModel.game_id == game_id)
+        async with self.app.database.session() as session:
+            result = await session.execute(query)
+            game = result.scalar_one_or_none()
+            if game:
+                game.game_status = GameStatusEnum.FINISHED
+                await session.commit()
+
+    async def remove_player_from_game(self, game_id: int, user_id: int) -> bool:
+        """Удаляет игрока из лобби. Возвращает False если игрок не был в игре."""
+        from sqlalchemy import delete
+        query = delete(GameUserModel).where(
+            GameUserModel.game_id == game_id,
+            GameUserModel.user_id == user_id,
+        )
+        async with self.app.database.session() as session:
+            result = await session.execute(query)
+            await session.commit()
+            return result.rowcount > 0
+        
+    async def get_players(self, game_id):
+        query = select(GameUserModel.user).where(GameUserModel.game_id==game_id).options(selectinload(GameUserModel.user))
+        
+        async with self.app.database.session() as session:
+            players_list = await session.execute(query)
+            return players_list.scalars().all()
+    
+    async def finish_round(self, chat_id: int, game_id: int):
+        # отменяем таймер
+        task = self.app.store.bots_manager.end_turn_tasks.pop(chat_id, None)
+        if task:
+            task.cancel()
+
+        # сбрасываем голоса
+        self.app.store.bots_manager.end_turn_votes.pop(chat_id, None)
+
+        await self.app.store.tg_api.send_message(
+            chat_id,
+        "⏳ Раунд завершён. Переход к следующему..."
+        )
+    
+    async def _end_turn_timeout(self, chat_id: int, game_id: int):
+        await asyncio.sleep(30)
+        await self.finish_round(chat_id, game_id)

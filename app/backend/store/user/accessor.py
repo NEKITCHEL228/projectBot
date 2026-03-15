@@ -1,13 +1,7 @@
-from typing import TYPE_CHECKING
-
 from sqlalchemy import select
 
 from app.backend.user.models import UserModel
 from app.backend.base.base_accessor import BaseAccessor
-from app.backend.web.utils import hash_password
-
-if TYPE_CHECKING:
-    from app.backend.web.app import Application
 
 class UserAccessor(BaseAccessor):
     async def get_by_tg_id(self, tg_id: str):
@@ -19,8 +13,8 @@ class UserAccessor(BaseAccessor):
             return user
         return None
 
-    async def create_user(self, tg_id: str):
-        user = UserModel(tg_id=tg_id)
+    async def create_user(self, tg_id: str, name: str = ""):
+        user = UserModel(tg_id=tg_id, name=name)
         
         async with self.app.database.session() as session:
             session.add(user)

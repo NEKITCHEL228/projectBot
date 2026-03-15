@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING
 
-from app.backend.store.bot.commands import setup_commands, setup_buttons
 from app.backend.base.base_accessor import BaseAccessor
 
 import aiohttp
@@ -24,8 +23,6 @@ class TgApiAccessor(BaseAccessor):
         self.token = app.config.bot.token
         self.server = f"https://api.telegram.org/bot{self.token}"
         self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False))
-        await setup_commands(self.session, self.server, app)
-        await setup_buttons(self.session, self.server, app)
         self.poller = Poller(app.store)
         self.poller.start()
 
@@ -93,14 +90,18 @@ class TgApiAccessor(BaseAccessor):
         }
         await self.session.post(url, json=payload)
 
-    async def send_inline_keyboard(self, chat_id: int, text: str, keyboard: list[list[dict]]) -> None:
+    async def send_inline_keyboard(self, chat_id: int, text: str, keyboard: list[list[dict]]) -> int | None:
         url = f"{self.server}/sendMessage"
         payload = {
             "chat_id": chat_id,
             "text": text,
             "reply_markup": {"inline_keyboard": keyboard},
         }
-        await self.session.post(url, json=payload)
+        async with self.session.post(url, json=payload) as response:
+            data = await response.json()
+        if data.get("ok"):
+            return data["result"]["message_id"]
+        return None
 
     async def answer_callback_query(self, callback_query_id: str) -> None:
         url = f"{self.server}/answerCallbackQuery"

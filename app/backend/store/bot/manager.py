@@ -1,3 +1,4 @@
+import asyncio
 from typing import TYPE_CHECKING
 from logging import getLogger
 
@@ -13,7 +14,12 @@ class BotManager:
         self.app = app
         self.router = router
         self.logger = getLogger("BotManager")
-
+        
+        self.lobby_message_ids: dict[int, int] = {}  # chat_id -> message_id
+        
+        self.end_turn_votes: dict[int, set[int]] = {}   # chat_id -> {user_id}
+        self.end_turn_tasks: dict[int, asyncio.Task] = {}  # chat_id -> timer
+    
     async def handle_updates(self, updates):
         for update in updates:
             validate_update = Update.model_validate(update)
@@ -28,7 +34,8 @@ class BotManager:
                 if user_id:
                     user = await self.app.store.users.get_by_tg_id(user_id)
                     if not user:
-                        await self.app.store.users.create_user(user_id)
+                        name = message.from_user.display_name
+                        await self.app.store.users.create_user(user_id, name)
 
                 await self.router.route_message(self, chat_id, user_id, text)
 
@@ -42,6 +49,8 @@ class BotManager:
                     await self.router.route_callback(self, chat_id, user_id, data)
 
                 await self.app.store.tg_api.answer_callback_query(cb.id)
+                
+
                         
                     
         

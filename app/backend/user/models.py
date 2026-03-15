@@ -1,6 +1,6 @@
 import typing
 
-from sqlalchemy import BigInteger, Column, Integer, Numeric, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.backend.store.database.sqlalchemy_base import BaseModel
@@ -17,6 +17,7 @@ class UserModel(BaseModel):
 
     user_id = Column(BigInteger, primary_key=True, autoincrement=True)
     tg_id = Column(BigInteger, nullable=False)
+    name = Column(String(255), nullable=False, default="")
     max_balance = Column(Numeric(12, 2), default=1000.0, nullable=False)
     games_played = Column(Integer, default=0, nullable=False)
     games_won = Column(Integer, default=0, nullable=False)
