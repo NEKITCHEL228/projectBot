@@ -10,7 +10,9 @@ if typing.TYPE_CHECKING:
 
 
 class UserModel(BaseModel):
-    __tablename__ = "user"
+    __tablename__ = "app_user"
+    __allow_unmapped__ = True
+    
     __table_args__ = (UniqueConstraint("tg_id", name="uq_user_tg_id"),)
 
     user_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -19,6 +21,6 @@ class UserModel(BaseModel):
     games_played = Column(Integer, default=0, nullable=False)
     games_won = Column(Integer, default=0, nullable=False)
 
-    game_users: list["GameUserModel"] = relationship(
+    game_user: list["GameUserModel"] = relationship(
         "GameUserModel", back_populates="user"
     )

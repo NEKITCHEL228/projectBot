@@ -3,7 +3,6 @@ aiohttp==3.13.3
 aiohttp-apispec==2.2.3 
 aiohttp-session==2.12.1
 aiosignal==1.4.0       
-alembic==1.18.4        
 apispec==3.3.2
 asyncpg==0.31.0        
 attrs==25.4.0

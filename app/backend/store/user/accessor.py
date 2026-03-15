@@ -1,16 +1,39 @@
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
+from app.backend.user.models import UserModel
 from app.backend.base.base_accessor import BaseAccessor
+from app.backend.web.utils import hash_password
 
 if TYPE_CHECKING:
     from app.backend.web.app import Application
-    
-class UserAccessor(BaseAccessor):
-    async def connect(self, app: "Application"):
-        pass
 
+class UserAccessor(BaseAccessor):
     async def get_by_tg_id(self, tg_id: str):
-        pass
+        query = select(UserModel).where(UserModel.tg_id == tg_id)
+        
+        async with self.app.database.session() as session:
+            result = await session.execute(query)
+            user = result.scalar_one_or_none()
+            return user
+        return None
 
     async def create_user(self, tg_id: str):
-        pass
+        user = UserModel(tg_id=tg_id)
+        
+        async with self.app.database.session() as session:
+            session.add(user)
+            await session.commit()
+            
+        return user
+    
+    async def get_list_users(self):
+        query = select(UserModel)
+        
+        async with self.app.database.session() as session:
+            result = await session.execute(query)
+            users = result.scalars().all()
+            return users
+        
+        return []

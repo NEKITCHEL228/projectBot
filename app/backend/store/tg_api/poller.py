@@ -11,6 +11,8 @@ class Poller:
         self.poll_task: Task | None = None
 
     def _done_callback(self, result: Future) -> None:
+        if result.cancelled():
+            return
         if result.exception():
             self.store.app.logger.exception(
                 "poller stopped with exception", exc_info=result.exception()

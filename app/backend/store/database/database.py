@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.backend.store.database.sqlalchemy_base import BaseModel
+import app.backend.game.models  # noqa: F401
+import app.backend.user.models  # noqa: F401
+import app.backend.admin.models  # noqa: F401
 
 if TYPE_CHECKING:
     from app.backend.web.app import Application

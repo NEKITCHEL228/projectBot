@@ -10,12 +10,13 @@ class Store:
         self.app = app
         from app.backend.store.admin.accessor import AdminAccessor
         from app.backend.store.bot.manager import BotManager
+        from app.backend.store.bot.command_haldlers import router
         from app.backend.store.game.accessor import GameAccessor
         from app.backend.store.user.accessor import UserAccessor
         from app.backend.store.tg_api.accessor import TgApiAccessor
 
         self.admins = AdminAccessor(app)
-        self.bots_manager = BotManager(app)
+        self.bots_manager = BotManager(app, router)
         self.games = GameAccessor(app)
         self.users = UserAccessor(app)
         self.tg_api = TgApiAccessor(app)

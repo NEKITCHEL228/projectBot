@@ -21,3 +21,15 @@ class AdminLoginView(View):
         session = await new_session(self.request)
         session["admin"] = {"tg_id": admin.tg_id, "id": admin.id}
         return {"tg_id": admin.tg_id, "id": admin.id}
+    
+class AdminCurrentView(View):
+    @response_schema(AdminSchema, 200)
+    async def get(self):
+        session = await get_session(self.request)
+        admin_data = session.get("admin")
+        if not admin_data:
+            raise HTTPUnauthorized(reason="Not authenticated")
+        admin = await self.app.store.get_admin_by_tg_id(admin_data["tg_id"])
+        if not admin:
+            raise HTTPUnauthorized(reason="Admin not found")
+        return {"tg_id": admin.tg_id, "id": admin.id}

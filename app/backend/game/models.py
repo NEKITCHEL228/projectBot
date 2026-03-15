@@ -30,6 +30,8 @@ class GameStatusEnum(str, PyEnum):
 
 class GameModel(BaseModel):
     __tablename__ = "game"
+    __allow_unmapped__ = True
+    
     __table_args__ = (
         Index("ix_game_chat_id", "chat_id"),
         Index("ix_game_created_at", "created_at"),
@@ -42,7 +44,7 @@ class GameModel(BaseModel):
     game_trading_session_round = Column(Integer, default=0, nullable=False)
     max_rounds = Column(Integer, nullable=False)
 
-    game_users: list["GameUserModel"] = relationship(
+    game_user: list["GameUserModel"] = relationship(
         "GameUserModel",
         back_populates="game",
         cascade="all, delete-orphan",
@@ -56,6 +58,8 @@ class GameModel(BaseModel):
 
 class GameUserModel(BaseModel):
     __tablename__ = "game_user"
+    __allow_unmapped__ = True
+    
     __table_args__ = (
         UniqueConstraint("game_id", "user_id", name="uq_game_user"),
         Index("ix_game_user_game_id", "game_id"),
@@ -64,10 +68,10 @@ class GameUserModel(BaseModel):
 
     game_user_id = Column(BigInteger, primary_key=True, autoincrement=True)
     game_id = Column(BigInteger, ForeignKey("game.game_id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(BigInteger, ForeignKey("user.user_id"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("app_user.user_id"), nullable=False)
 
-    game: "GameModel" = relationship("GameModel", back_populates="game_users")
-    user: "UserModel" = relationship("UserModel", back_populates="game_users")
+    game: "GameModel" = relationship("GameModel", back_populates="game_user")
+    user: "UserModel" = relationship("UserModel", back_populates="game_user")
     balance: "UserBalanceModel" = relationship(
         "UserBalanceModel",
         back_populates="game_user",
@@ -83,6 +87,8 @@ class GameUserModel(BaseModel):
 
 class CompanySharesModel(BaseModel):
     __tablename__ = "company_shares"
+    __allow_unmapped__ = True
+    
     __table_args__ = (
         UniqueConstraint("game_id", "company_share_name", name="uq_company_share_game_name"),
         Index("ix_company_shares_game_id", "game_id"),
@@ -101,6 +107,8 @@ class CompanySharesModel(BaseModel):
 
 class UserCompanyShareModel(BaseModel):
     __tablename__ = "user_company_share"
+    __allow_unmapped__ = True
+    
     __table_args__ = (
         UniqueConstraint(
             "game_user_id", "company_share_id", name="uq_user_company_share"
@@ -126,6 +134,7 @@ class UserCompanyShareModel(BaseModel):
 
 class UserBalanceModel(BaseModel):
     __tablename__ = "user_balance"
+    __allow_unmapped__ = True
 
     user_balance_id = Column(Integer, primary_key=True, autoincrement=True)
     game_user_id = Column(
