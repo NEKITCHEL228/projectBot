@@ -9,13 +9,10 @@ class CallbackBase:
     def from_data(cls, data: str):
         parts = data.split(":")
         kwargs = {}
-
-        fields = cls.__annotations__.keys()
-
+        fields = list(cls.__annotations__.keys())
         for field, value in zip(fields, parts[1:]):
             field_type = cls.__annotations__[field]
             kwargs[field] = field_type(value)
-
         return cls(**kwargs)
 
     @classmethod
@@ -24,36 +21,33 @@ class CallbackBase:
         return f"{cls.prefix}:{values}"
 
 
+# ── Лобби ────────────────────────────────────────────────────────────────────
+
 class StartGameCallback(CallbackBase):
+    """Создатель лобби нажал «Начать игру» в inline-сообщении лобби."""
     prefix = "start_game"
     game_id: int
 
 
 class JoinGameCallback(CallbackBase):
+    """Игрок нажал «Присоединиться к игре» в inline-сообщении лобби."""
     prefix = "join_game"
     game_id: int
 
 
-class ContinueGameCallback(CallbackBase):
-    prefix = "continue_game"
-    game_id: int
-
-
-class RequestEndGameCallback(CallbackBase):
-    prefix = "request_end_game"
-    game_id: int
-
+# ── Управление игрой ─────────────────────────────────────────────────────────
 
 class EndGameCallback(CallbackBase):
+    """Подтверждение завершения игры (кнопка «Да»)."""
     prefix = "end_game"
     game_id: int
 
 
-class SwapGameRoundCallback(CallbackBase):
-    prefix = "swap_game_round"
+class ContinueGameCallback(CallbackBase):
+    """Отмена — продолжить игру (кнопка «Нет» / «Отмена»)."""
+    prefix = "continue_game"
     game_id: int
 
-
-class EndTurnVoteCallback(CallbackBase):
-    prefix = "end_turn_vote"
+class NextTurnCallback(CallbackBase):
+    prefix = "next_turn"
     game_id: int
