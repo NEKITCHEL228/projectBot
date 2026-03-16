@@ -30,35 +30,23 @@ def application() -> Application:
     return app
 
 
-@pytest_asyncio.fixture(scope="session")  # ← session, один раз
+@pytest_asyncio.fixture(scope="session")
 async def connect_db(application: Application):
     await application.database.connect(application)
     yield application
     await application.database.disconnect(application)
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)  # ← тоже session!
-async def clear_db(connect_db: Application):
-    yield
-    # Очистка после ВСЕЙ сессии, а не каждого теста
-    async with AsyncSession(connect_db.database.engine) as session:
-        for table in reversed(
-            list(connect_db.database._database.metadata.sorted_tables)
-        ):
-            await session.execute(text(f"TRUNCATE {table.name} CASCADE"))
-        await session.commit()
-
-
-# Очистка между тестами — через отдельную фикстуру function scope
-@pytest_asyncio.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)  # запускается для каждого теста
 async def clean_tables(connect_db: Application):
     yield
-    async with AsyncSession(connect_db.database.engine) as session:
-        for table in reversed(
-            list(connect_db.database._database.metadata.sorted_tables)
-        ):
-            await session.execute(text(f"TRUNCATE {table.name} CASCADE"))
-        await session.commit()
+    # очистка ПОСЛЕ теста
+    async with connect_db.database.session() as session:
+        async with session.begin():
+            for table in reversed(
+                connect_db.database._database.metadata.sorted_tables
+            ):
+                await session.execute(text(f"TRUNCATE {table.name} CASCADE"))
 
 
 @pytest.fixture

@@ -11,7 +11,6 @@ class UserAccessor(BaseAccessor):
             result = await session.execute(query)
             user = result.scalar_one_or_none()
             return user
-        return None
 
     async def create_user(self, tg_id: str, name: str = ""):
         user = UserModel(tg_id=tg_id, name=name)
@@ -29,5 +28,3 @@ class UserAccessor(BaseAccessor):
             result = await session.execute(query)
             users = result.scalars().all()
             return users
-        
-        return []

@@ -1,6 +1,4 @@
 from aiohttp.web import (Application as AiohttpApplication, Request as AiohttpRequest, View as AiohttpView)
-from aiohttp_session import setup as session_setup
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_apispec import setup_aiohttp_apispec
 
 from app.backend.web.config import setup_config, Config

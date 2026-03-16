@@ -47,7 +47,3 @@ class ContinueGameCallback(CallbackBase):
     """Отмена — продолжить игру (кнопка «Нет» / «Отмена»)."""
     prefix = "continue_game"
     game_id: int
-
-class NextTurnCallback(CallbackBase):
-    prefix = "next_turn"
-    game_id: int

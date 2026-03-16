@@ -8,7 +8,7 @@ if typing.TYPE_CHECKING:
 
 @dataclass
 class AdminConfig:
-    tg_id: str
+    tg_id: int
     password: str
     
 

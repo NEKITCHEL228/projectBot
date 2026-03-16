@@ -25,7 +25,6 @@ class AdminAccessor(BaseAccessor):
             result = await session.execute(query)
             admin = result.scalar_one_or_none()
             return admin
-        return None
 
     async def create_admin(self, tg_id: str, password: str):
         admin = AdminModel(tg_id=tg_id, password_hash=hash_password(password))
@@ -43,5 +42,3 @@ class AdminAccessor(BaseAccessor):
             result = await session.execute(query)
             admins = result.scalars().all()
             return admins
-        
-        return []

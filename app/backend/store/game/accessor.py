@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 class GameAccessor(BaseAccessor):
     def __init__(self, app: "Application"):
-        self.app = app
+        super().__init__(app)
 
     # ── Активная игра ─────────────────────────────────────────────────────────
 
@@ -115,8 +115,8 @@ class GameAccessor(BaseAccessor):
                 if balance > float(gu.user.max_balance):
                     gu.user.max_balance = balance
                 
-                game.game_status = GameStatusEnum.FINISHED
-                await session.commit()
+            game.game_status = GameStatusEnum.FINISHED
+            await session.commit()
             
         chat_id = game.chat_id
         text = build_game_over_message(round_num, players_balances)

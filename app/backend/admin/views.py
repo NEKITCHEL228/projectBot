@@ -15,7 +15,7 @@ class AdminLoginView(View):
         if not data:
             raise HTTPUnauthorized(reason="Missing JSON body")
         admin = await self.app.store.get_admin_by_tg_id(data["tg_id"])
-        if not admin or not check_admin_auth(":".join([data["tg_id"], data["password_hash"]]), self.app.config.admin.tg_id, self.app.config.admin.password):
+        if not admin or not check_admin_auth(":".join([data["tg_id"], data["password"]]), self.app.config.admin.tg_id, self.app.config.admin.password):
             raise HTTPForbidden(reason="Invalid credentials")
         
         session = await new_session(self.request)

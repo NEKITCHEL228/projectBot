@@ -28,8 +28,12 @@ class Poller:
 
     async def stop(self) -> None:
         self.is_running = False
-
-        await self.poll_task
+        if self.poll_task:
+            self.poll_task.cancel()
+            try:
+                await self.poll_task
+            except asyncio.CancelledError:
+                pass
 
     async def poll(self) -> None:
         while self.is_running:
