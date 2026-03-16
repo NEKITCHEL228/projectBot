@@ -41,7 +41,7 @@ class GameModel(BaseModel):
     chat_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     game_status = Column(Enum(GameStatusEnum), nullable=False)
-    game_trading_session_round = Column(Integer, default=0, nullable=False)
+    game_trading_session_round = Column(Integer, default=1, nullable=False)
     max_rounds = Column(Integer, nullable=False)
 
     game_user: list["GameUserModel"] = relationship(

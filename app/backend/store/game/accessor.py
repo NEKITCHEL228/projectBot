@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
@@ -12,7 +11,8 @@ from app.backend.game.models import (
     UserCompanyShareModel,
     UserBalanceModel,
 )
-from app.backend.store.tg_api.game_builders import get_initial_companies, build_round_start_message, get_random_events
+from app.backend.store.tg_api.game_builders import get_initial_companies, build_round_start_message, get_random_events, build_game_over_message, MAIN_MENU_BUTTONS
+from app.backend.user.models import UserModel
 
 if TYPE_CHECKING:
     from app.backend.web.app import Application
@@ -63,6 +63,7 @@ class GameAccessor(BaseAccessor):
             game = result.scalar_one_or_none()
             if game:
                 game.game_status = GameStatusEnum.IN_PROGRESS
+                game.game_trading_session_round = 1
                 
                 for company in get_initial_companies():
                     session.add(CompanySharesModel(
@@ -78,9 +79,48 @@ class GameAccessor(BaseAccessor):
         async with self.app.database.session() as session:
             result = await session.execute(query)
             game = result.scalar_one_or_none()
-            if game:
+            
+            if not game:
+                return
+            
+            round_num = game.game_trading_session_round
+            
+            players_q = (
+                select(GameUserModel)
+                .where(GameUserModel.game_id == game_id)
+                .options(selectinload(GameUserModel.user), selectinload(GameUserModel.balance))
+                )
+            
+            players_result = await session.execute(players_q)
+            game_users = players_result.scalars().all()
+            
+            players_balances = [
+            {
+                "name": gu.user.name,
+                "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
+            }
+            for gu in game_users
+            ]
+            
+            # Определяем победителя
+            winner = max(game_users, key=lambda gu: float(gu.balance.full_balance) if gu.balance else 0.0, default=None)
+
+            # Обновляем статистику всех игроков
+            for gu in game_users:
+                gu.user.games_played += 1
+                if winner and gu.game_user_id == winner.game_user_id:
+                    gu.user.games_won += 1
+                # Обновляем max_balance если текущий баланс выше
+                balance = float(gu.balance.full_balance) if gu.balance else 0.0
+                if balance > float(gu.user.max_balance):
+                    gu.user.max_balance = balance
+                
                 game.game_status = GameStatusEnum.FINISHED
                 await session.commit()
+            
+        chat_id = game.chat_id
+        text = build_game_over_message(round_num, players_balances)
+        await self.app.store.tg_api.send_keyboard(chat_id, text, MAIN_MENU_BUTTONS)
 
     # ── Игроки ────────────────────────────────────────────────────────────────
 
@@ -135,6 +175,101 @@ class GameAccessor(BaseAccessor):
         )
         result = await session.execute(query)
         return result.scalar_one_or_none()
+    
+    # ── Вспомогательный метод: Пересчитывает company_share_balance и full_balance для всех игроков ─────────────
+    
+    async def _recalculate_balances(self, session, game_id: int) -> None:
+        # Загружаем актуальные цены
+        companies_result = await session.execute(
+            select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+        )
+        price_map = {
+            c.company_share_id: float(c.company_share_price)
+            for c in companies_result.scalars().all()
+        }
+
+        # Загружаем всех игроков с балансами и акциями
+        players_q = (
+            select(GameUserModel)
+            .where(GameUserModel.game_id == game_id)
+            .options(
+                selectinload(GameUserModel.balance),
+                selectinload(GameUserModel.company_shares).selectinload(
+                    UserCompanyShareModel.company_share
+                ),
+            )
+        )
+        result = await session.execute(players_q)
+        game_users = result.scalars().all()
+
+        for gu in game_users:
+            if not gu.balance:
+                continue
+
+            # Считаем стоимость всех акций игрока по новым ценам
+            shares_value = sum(
+                s.company_share_count * price_map.get(s.company_share_id, 0.0)
+                for s in gu.company_shares
+            )
+
+            gu.balance.company_share_balance = shares_value
+            gu.balance.full_balance = float(gu.balance.pure_balance) + shares_value
+                    
+    # ── Вспомогательный метод: Вывод сообщения о раунде ─────────────
+    
+    async def print_round_message(self, game_id: int, events: list[dict] | None = None) -> None:
+        """
+        Выводит информацию о текущем раунде.
+        events=None означает первый раунд — цены показываются без изменений.
+        """
+        async with self.app.database.session() as session:
+            game_q = select(GameModel).where(GameModel.game_id == game_id)
+            result = await session.execute(game_q)
+            game = result.scalar_one_or_none()
+            if not game:
+                return
+
+            players_q = (
+                select(GameUserModel)
+                .where(GameUserModel.game_id == game_id)
+                .options(
+                    selectinload(GameUserModel.user),
+                    selectinload(GameUserModel.balance),
+                )
+            )
+            result = await session.execute(players_q)
+            game_users = result.scalars().all()
+
+            players_balances = [
+                {
+                    "name": gu.user.name,
+                    "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
+                }
+                for gu in game_users
+            ]
+
+            companies_result = await session.execute(
+                select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+            )
+            companies_data = [
+                {"name": c.company_share_name, "price": float(c.company_share_price)}
+                for c in companies_result.scalars().all()
+            ]
+
+        # Если события не переданы — первый раунд, цены без изменений
+        round_events = events if events is not None else [
+            {
+                "name": c["name"],
+                "old_price": c["price"],
+                "new_price": c["price"],
+                "direction": "none",
+                "percent": 0,
+            }
+            for c in companies_data
+        ]
+
+        text = build_round_start_message(game.game_trading_session_round, players_balances, round_events)
+        await self.app.store.tg_api.send_message(game.chat_id, text)
 
     # ── Акции / компании ──────────────────────────────────────────────────────
 
@@ -301,62 +436,71 @@ class GameAccessor(BaseAccessor):
 
     # ── Раунды ────────────────────────────────────────────────────────────────
 
-    async def finish_round(self, chat_id: int, game_id: int) -> str:
-        """
-        1. Сбрасывает ходы игроков.
-        2. Инкрементирует счётчик раундов.
-        3. Отправляет текст сообщения с рейтингом игроков и ценами акций.
-        """
-        
+    async def finish_round(self, chat_id: int, game_id: int) -> None:
         manager = self.app.store.bots_manager
         manager.reset_turns(chat_id)
-        
+
         new_round = 1
 
-        # Инкремент счётчика раундов
-        query = select(GameModel).where(GameModel.game_id == game_id)
+        # Увеличиваем раунд
         async with self.app.database.session() as session:
-            result = await session.execute(query)
+            result = await session.execute(
+                select(GameModel).where(GameModel.game_id == game_id)
+            )
             game = result.scalar_one_or_none()
             if game:
-                game.game_trading_session_round += 1
+                new_round = game.game_trading_session_round + 1
+                if new_round > game.max_rounds:
+                    await self.finish_game(game_id)
+                    return
+                game.game_trading_session_round = new_round
                 await session.commit()
-                
-        # Данные для сообщения 
+
+        # Читаем старые цены, генерируем события, применяем новые цены
         async with self.app.database.session() as session:
-            query = select(GameUserModel).where(GameUserModel.game_id == game_id).options(selectinload(GameUserModel.user),selectinload(GameUserModel.balance))
-            result = await session.execute(query)
-            game_users = result.scalars().all()
-            
-            # Балансы игроков до изменения цен
-            players_balances = [
-                {
-                    "name": gu.user.name,
-                    # full_balance = деньги + акции
-                    "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
-                }
-                for gu in game_users
-            ]
-            
-            # Цены акций до изменения цен
-            companies_result_query = select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
-            companies_result = await session.execute(companies_result_query)
-            companies = companies_result.scalars().all()
-            
+            companies_result = await session.execute(
+                select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+            )
+            companies_rows = companies_result.scalars().all()
             companies_data = [
                 {"name": c.company_share_name, "price": float(c.company_share_price)}
-                for c in companies
+                for c in companies_rows
             ]
-            
-            # Генерация событий и занос данных в БД
+
+            # События
             events = get_random_events(companies_data)
-            
+
+            # Применяем новые цены в БД
             price_map = {e["name"]: e["new_price"] for e in events}
-            for company_row in companies:
+            for company_row in companies_rows:
                 if company_row.company_share_name in price_map:
                     company_row.company_share_price = price_map[company_row.company_share_name]
 
             await session.commit()
-            
+
+            # Пересчитываем балансы по новым ценам
+            await self._recalculate_balances(session, game_id)
+            await session.commit()
+
+            # Читаем балансы ПОСЛЕ пересчёта
+            players_q = (
+                select(GameUserModel)
+                .where(GameUserModel.game_id == game_id)
+                .options(
+                    selectinload(GameUserModel.user),
+                    selectinload(GameUserModel.balance),
+                )
+            )
+            result = await session.execute(players_q)
+            game_users = result.scalars().all()
+
+            players_balances = [
+                {
+                    "name": gu.user.name,
+                    "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
+                }
+                for gu in game_users
+            ]
+
         text = build_round_start_message(new_round, players_balances, events)
-        return text
+        await self.app.store.tg_api.send_message(chat_id, text)

@@ -119,7 +119,6 @@ async def handle_join_game_callback(
     entrance_message = build_lobby_entrance_message(user, game.game_id)
     await self.app.store.tg_api.send_message(chat_id, entrance_message)
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Inline: Начать игру (из лобби)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -155,6 +154,8 @@ async def handle_start_game_callback(
 
     # Отправляем reply-клавиатуру с кнопками покупки/продажи/портфеля
     await self.app.store.tg_api.send_keyboard(chat_id, start_text, GAME_MENU_BUTTONS)
+    # Отправляем сообщение о 1 раунде
+    await self.app.store.games.print_round_message(callback.game_id)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Покинуть игру (главное меню — только из лобби)
@@ -415,8 +416,7 @@ async def handle_end_turn(self: "BotManager", chat_id: int, user_id: int):
     )
 
     if ended_count >= players_count:
-        text = await self.app.store.games.finish_round(chat_id, game.game_id)
-        await self.app.store.tg_api.send_message(chat_id, text)
+        await self.app.store.games.finish_round(chat_id, game.game_id)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Завершить игру (reply-кнопка) → подтверждение
@@ -448,25 +448,20 @@ async def handle_end_game_request(self: "BotManager", chat_id: int, user_id: int
 async def handle_end_game_callback(
     self: "BotManager", chat_id: int, user_id: int, callback: EndGameCallback
 ):  
-    # Удаляем сообщения о подтверждении и раунде игры
+    # Удаляем сообщения о подтверждении
     confirm_id = self.confirm_message_ids.pop(chat_id, None)
     if confirm_id:
         await self.app.store.tg_api.delete_message(chat_id, confirm_id)
-        
-    game_info_message_id = self.game_info_message_ids.pop(chat_id, None)
-    if game_info_message_id:
-        await self.app.store.tg_api.delete_message(chat_id, game_info_message_id)
     
     game = await self.app.store.games.get_active_game(chat_id)
     if not game:
         await self.app.store.tg_api.send_message(chat_id, "Игра не найдена.")
         return
 
-    await self.app.store.games.finish_game(callback.game_id)
     self.reset_turns(chat_id)
     self._pending_actions.pop(chat_id, None) 
       
-    await self.app.store.tg_api.send_keyboard(chat_id, "🏁 Игра завершена!", MAIN_MENU_BUTTONS)
+    await self.app.store.games.finish_game(callback.game_id)
 
 @router.callback(ContinueGameCallback)
 async def handle_continue_game_callback(
