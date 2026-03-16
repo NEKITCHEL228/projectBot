@@ -2,6 +2,13 @@
 
 > Telegram-бот для групповой игры на бирже — покупайте и продавайте акции, следите за рынком и побеждайте соперников!
 
+## 👤 Автор
+
+**Малютин Никита Михайлович**
+
+[![Email](https://img.shields.io/badge/Email-maluitin4589%40mail.ru-red?style=flat&logo=mail.ru)](mailto:maluitin4589@mail.ru)
+[![Telegram](https://img.shields.io/badge/Telegram-@Nikita791-2CA5E0?style=flat&logo=telegram)](https://t.me/Nikita791)
+
 ---
 
 ## 🎮 Об игре
@@ -239,6 +246,13 @@ user_company_share (портфель игрока)
   ├── company_share_id (FK → company_shares)
   └── company_share_count
 ```
+
+---
+
+## 📊 Диаграмма базы данных
+
+[![DB Diagram](https://img.shields.io/badge/dbdiagram.io-Открыть%20схему-blue?style=for-the-badge&logo=databricks)](https://dbdiagram.io/d/69adc89df18be96a591c056b)
+
 
 ---
 
