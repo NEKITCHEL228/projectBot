@@ -249,6 +249,12 @@ user_company_share (портфель игрока)
 
 ---
 
+## 🎬 Демонстрация
+
+[![Demo Video](https://img.shields.io/badge/Google%20Drive-Смотреть%20демо-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/drive/folders/14sb7sYCsKiKaJpPBsgKvmHgrtFMd96lw?usp=sharing)
+
+---
+
 ## 📊 Диаграмма базы данных
 
 [![DB Diagram](https://img.shields.io/badge/dbdiagram.io-Открыть%20схему-blue?style=for-the-badge&logo=databricks)](https://dbdiagram.io/d/69adc89df18be96a591c056b)
