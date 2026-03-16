@@ -1,0 +1,13 @@
+bot:
+  token: "fake_token_for_tests"
+
+database:
+  host: localhost
+  port: 5433          # ← порт тестовой БД
+  user: bot_user
+  password: bot_password
+  name: bot_test_database
+
+admin:
+  tg_id: 1111111111
+  password: testpassword

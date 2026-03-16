@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   db:
     image: postgres:16
@@ -13,6 +12,19 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  db_test:
+    image: postgres:16
+    container_name: test_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: bot_user
+      POSTGRES_PASSWORD: bot_password
+      POSTGRES_DB: bot_test_database
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
 
 volumes:
   postgres_data:
