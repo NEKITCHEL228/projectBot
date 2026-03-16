@@ -137,10 +137,9 @@ async def handle_start_game_callback(
         await self.app.store.tg_api.send_message(chat_id, "Игра уже запущена!")
         return
 
-    # TODO Раскоментить после тестов
-    # if len(game.game_user) < 2:
-    #     await self.app.store.tg_api.send_message(chat_id, "Нужно минимум 2 игрока для начала игры.")
-    #     return
+    if len(game.game_user) < 2:
+        await self.app.store.tg_api.send_message(chat_id, "Нужно минимум 2 игрока для начала игры.")
+        return
 
     # Удаляем сообщение лобби
     lobby_message_id = self.lobby_message_ids.pop(chat_id, None)
