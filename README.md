@@ -108,8 +108,17 @@ database:
   name: bot_database
 
 admin:
-  tg_id: "123456789"
+  tg_id: 123456789
   password: "your_admin_password"
+
+session:
+  key: "YOUR_BASE64_SESSION_KEY"
+```
+
+Сгенерировать ключ сессии:
+
+```bash
+python -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
 ### 3. Запуск через Docker Compose
@@ -215,6 +224,11 @@ app_user
   ├── games_played
   └── games_won
 
+admin
+  ├── admin_id (PK)
+  ├── tg_id (FK → app_user.tg_id)
+  └── password_hash
+
 game
   ├── game_id (PK)
   ├── chat_id
@@ -222,14 +236,26 @@ game
   ├── game_trading_session_round
   └── max_rounds
 
+game_state (состояние сообщений игры)
+  ├── game_state_id (PK)
+  ├── game_id (FK → game, 1:1)
+  ├── lobby_message_id
+  └── confirm_message_id
+
 game_user (связь игра ↔ пользователь)
   ├── game_user_id (PK)
   ├── game_id (FK → game)
   └── user_id (FK → app_user)
 
+player_turn_state (состояние хода игрока)
+  ├── player_turn_state_id (PK)
+  ├── game_user_id (FK → game_user, 1:1)
+  ├── turn_ended
+  └── pending_action
+
 user_balance (баланс игрока в игре)
   ├── user_balance_id (PK)
-  ├── game_user_id (FK → game_user)
+  ├── game_user_id (FK → game_user, 1:1)
   ├── full_balance      (pure + shares)
   ├── pure_balance      (свободные деньги)
   └── company_share_balance
@@ -259,7 +285,6 @@ user_company_share (портфель игрока)
 
 [![DB Diagram](https://img.shields.io/badge/dbdiagram.io-Открыть%20схему-blue?style=for-the-badge&logo=databricks)](https://dbdiagram.io/d/69adc89df18be96a591c056b)
 
-
 ---
 
 ## 🔐 REST API (Admin)
@@ -281,15 +306,13 @@ pytest
 
 ---
 
-## 📝 Переменные окружения
+## 📝 Конфигурация
 
-Все настройки берутся из `config.yml`. Путь к файлу передаётся при запуске через `main.py`.
+Все настройки берутся из `config.yml`. Пример конфигурации находится в `config.yml.example`.
 
----
-
-## 📌 Known Issues / TODO
-
-- [ ] Состояние лобби и ходов хранится в памяти — при перезапуске теряется
-- [ ] Применить Alembic миграции вместо `create_all` при старте
-- [ ] Добавить rate limiting на торговые команды
-- [ ] Записывать историю изменения цен акций в БД
+| Секция | Параметр | Описание |
+|---|---|---|
+| `bot` | `token` | Токен Telegram-бота |
+| `database` | `host`, `port`, `user`, `password`, `name` | Параметры PostgreSQL |
+| `admin` | `tg_id`, `password` | Данные администратора |
+| `session` | `key` | Base64-ключ для шифрования сессий |
