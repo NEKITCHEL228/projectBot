@@ -60,14 +60,15 @@ class BotRouter:
         text: str,
     ) -> None:
         # 1. Проверяем pending-действие для пользователя
-        pending_action = manager.get_pending_action(chat_id, user_id)
-        if pending_action and not text.startswith("/"):
-            handler = self._pending_handlers.get(pending_action)
-            if handler:
-                await handler(manager, chat_id, user_id, text)
-                return
+        if not text.startswith("/"):
+            pending_action = manager.app.store.games.get_pending_action_for_chat(chat_id, user_id)
+            if pending_action:
+                handler = self._pending_handlers.get(pending_action)
+                if handler:
+                    await handler(manager, chat_id, user_id, text)
+                    return
 
-        # 2. Команды с аргументами (/buy TELEGRAM 5, /sell VK 3)
+        # 2. Команды с аргументами (/buy, /sell)
         first_word = text.split()[0] if text.split() else ""
         cmd_handler = self._command_handlers.get(first_word)
         if cmd_handler:

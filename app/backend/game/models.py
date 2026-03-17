@@ -12,7 +12,8 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
-    BigInteger
+    BigInteger,
+    Boolean
 )
 from sqlalchemy.orm import relationship
 
@@ -54,6 +55,12 @@ class GameModel(BaseModel):
         back_populates="game",
         cascade="all, delete-orphan",
     )
+    game_state: "GameStateModel" = relationship(
+        "GameStateModel",
+        back_populates="game",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class GameUserModel(BaseModel):
@@ -83,7 +90,42 @@ class GameUserModel(BaseModel):
         back_populates="game_user",
         cascade="all, delete-orphan",
     )
+    turn_state: "PlayerTurnStateModel" = relationship(
+        "PlayerTurnStateModel",
+        back_populates="game_user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
+
+class GameStateModel(BaseModel):
+    __tablename__ = "game_state"
+    __allow_unmapped__ = True
+
+    game_state_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    game_id = Column(
+        BigInteger, ForeignKey("game.game_id", ondelete="CASCADE"),
+        nullable=False, unique=True
+    )
+    lobby_message_id   = Column(BigInteger, nullable=True)
+    confirm_message_id = Column(BigInteger, nullable=True)
+
+    game: "GameModel" = relationship("GameModel", back_populates="game_state")
+    
+    
+class PlayerTurnStateModel(BaseModel):
+    __tablename__ = "player_turn_state"
+    __allow_unmapped__ = True
+
+    player_turn_state_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    game_user_id = Column(
+        BigInteger, ForeignKey("game_user.game_user_id", ondelete="CASCADE"),
+        nullable=False, unique=True
+    )
+    turn_ended     = Column(Boolean, default=False, nullable=False)
+    pending_action = Column(String(32), nullable=True)
+
+    game_user: "GameUserModel" = relationship("GameUserModel", back_populates="turn_state")
 
 class CompanySharesModel(BaseModel):
     __tablename__ = "company_shares"

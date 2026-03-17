@@ -76,7 +76,7 @@ async def handle_start_game(self: "BotManager", chat_id: int, user_id: int):
     text, keyboard = build_lobby_message(user_names, new_game.game_id)
     message_id = await self.app.store.tg_api.send_inline_keyboard(chat_id, text, keyboard)
     if message_id:
-        self.lobby_message_ids[chat_id] = message_id
+        await self.set_lobby_message_id(new_game.game_id, message_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -108,13 +108,14 @@ async def handle_join_game_callback(
     user_names = [gu.user.name for gu in updated_game.game_user]
     text, keyboard = build_lobby_message(user_names, game.game_id)
 
-    old_message_id = self.lobby_message_ids.pop(chat_id, None)
+    old_message_id = await self.get_lobby_message_id(game.game_id)
     if old_message_id:
         await self.app.store.tg_api.delete_message(chat_id, old_message_id)
+        await self.set_lobby_message_id(game.game_id, None)
 
     message_id = await self.app.store.tg_api.send_inline_keyboard(chat_id, text, keyboard)
     if message_id:
-        self.lobby_message_ids[chat_id] = message_id
+        await self.set_lobby_message_id(game.game_id, message_id)
 
     entrance_message = build_lobby_entrance_message(user, game.game_id)
     await self.app.store.tg_api.send_message(chat_id, entrance_message)
@@ -142,9 +143,10 @@ async def handle_start_game_callback(
         return
 
     # Удаляем сообщение лобби
-    lobby_message_id = self.lobby_message_ids.pop(chat_id, None)
+    lobby_message_id = await self.get_lobby_message_id(callback.game_id)
     if lobby_message_id:
         await self.app.store.tg_api.delete_message(chat_id, lobby_message_id)
+        await self.set_lobby_message_id(callback.game_id, None)
 
     await self.app.store.games.start_game(callback.game_id)
 
@@ -181,9 +183,10 @@ async def handle_leave_lobby(self: "BotManager", chat_id: int, user_id: int):
     updated_game = await self.app.store.games.get_active_game(chat_id)
     remaining = updated_game.game_user if updated_game else []
 
-    old_message_id = self.lobby_message_ids.pop(chat_id, None)
+    old_message_id = await self.get_lobby_message_id(game.game_id)
     if old_message_id:
         await self.app.store.tg_api.delete_message(chat_id, old_message_id)
+        await self.set_lobby_message_id(game.game_id, None)
 
     exit_message = build_lobby_exit_message(user, game.game_id)
 
@@ -200,7 +203,7 @@ async def handle_leave_lobby(self: "BotManager", chat_id: int, user_id: int):
     text, keyboard = build_lobby_message(user_names, game.game_id)
     message_id = await self.app.store.tg_api.send_inline_keyboard(chat_id, text, keyboard)
     if message_id:
-        self.lobby_message_ids[chat_id] = message_id
+        await self.set_lobby_message_id(game.game_id, message_id)
 
     await self.app.store.tg_api.send_message(chat_id, exit_message)
 
@@ -237,14 +240,15 @@ async def handle_buy_shares(self: "BotManager", chat_id: int, user_id: int):
     if not _is_player_in_game(game, user_id):
         await self.app.store.tg_api.send_message(chat_id, "❌ Вы не участвуете в этой игре.")
         return
- 
-    if self.has_ended_turn(chat_id, user_id):
-        await self.app.store.tg_api.send_message(
-            chat_id, "❌ Вы завершили ход и не можете покупать акции в этом раунде."
-        )
+    
+    user = await self.app.store.users.get_by_tg_id(user_id)
+    if not user:
+        return
+    
+    if await self.has_ended_turn(game.game_id, user.user_id): 
+        await self.app.store.tg_api.send_message(chat_id, "❌ Вы завершили ход...")
         return
  
-    user = await self.app.store.users.get_by_tg_id(user_id)
     portfolio, balance = await self.app.store.games.get_portfolio(game.game_id, user.user_id)
     companies = await self.app.store.games.get_companies(game.game_id)
  
@@ -265,14 +269,15 @@ async def handle_sell_shares(self: "BotManager", chat_id: int, user_id: int):
     if not _is_player_in_game(game, user_id):
         await self.app.store.tg_api.send_message(chat_id, "❌ Вы не участвуете в этой игре.")
         return
- 
-    if self.has_ended_turn(chat_id, user_id):
-        await self.app.store.tg_api.send_message(
-            chat_id, "❌ Вы завершили ход и не можете продавать акции в этом раунде."
-        )
+    
+    user = await self.app.store.users.get_by_tg_id(user_id)
+    if not user:
+        return
+    
+    if await self.has_ended_turn(game.game_id, user.user_id): 
+        await self.app.store.tg_api.send_message(chat_id, "❌ Вы завершили ход и не можете продавать акции в этом раунде.")
         return
  
-    user = await self.app.store.users.get_by_tg_id(user_id)
     portfolio, balance = await self.app.store.games.get_portfolio(game.game_id, user.user_id)
  
     await self.app.store.tg_api.send_message(
@@ -292,11 +297,13 @@ async def handle_buy_command(self: "BotManager", chat_id: int, user_id: int, tex
     if not _is_player_in_game(game, user_id):
         await self.app.store.tg_api.send_message(chat_id, "❌ Вы не участвуете в этой игре.")
         return
- 
-    if self.has_ended_turn(chat_id, user_id):
-        await self.app.store.tg_api.send_message(
-            chat_id, "❌ Вы завершили ход и не можете покупать акции в этом раунде."
-        )
+    
+    user = await self.app.store.users.get_by_tg_id(user_id)
+    if not user:
+        return
+    
+    if await self.has_ended_turn(game.game_id, user.user_id): 
+        await self.app.store.tg_api.send_message(chat_id, "❌ Вы завершили ход и не можете покупать акции в этом раунде.")
         return
  
     # Парсим: /buy TELEGRAM 5
@@ -310,10 +317,6 @@ async def handle_buy_command(self: "BotManager", chat_id: int, user_id: int, tex
     _, company_name, qty_str = parts
     if not qty_str.isdigit() or int(qty_str) <= 0:
         await self.app.store.tg_api.send_message(chat_id, "⚠️ Количество должно быть положительным числом.")
-        return
- 
-    user = await self.app.store.users.get_by_tg_id(user_id)
-    if not user:
         return
  
     success, message = await self.app.store.games.buy_shares(
@@ -334,11 +337,13 @@ async def handle_sell_command(self: "BotManager", chat_id: int, user_id: int, te
     if not _is_player_in_game(game, user_id):
         await self.app.store.tg_api.send_message(chat_id, "❌ Вы не участвуете в этой игре.")
         return
- 
-    if self.has_ended_turn(chat_id, user_id):
-        await self.app.store.tg_api.send_message(
-            chat_id, "❌ Вы завершили ход и не можете продавать акции в этом раунде."
-        )
+    
+    user = await self.app.store.users.get_by_tg_id(user_id)
+    if not user:
+        return
+    
+    if await self.has_ended_turn(game.game_id, user.user_id): 
+        await self.app.store.tg_api.send_message(chat_id, "❌ Вы завершили ход и не можете продавать акции в этом раунде.")
         return
  
     # Парсим: /sell TELEGRAM 3
@@ -352,10 +357,6 @@ async def handle_sell_command(self: "BotManager", chat_id: int, user_id: int, te
     _, company_name, qty_str = parts
     if not qty_str.isdigit() or int(qty_str) <= 0:
         await self.app.store.tg_api.send_message(chat_id, "⚠️ Количество должно быть положительным числом.")
-        return
- 
-    user = await self.app.store.users.get_by_tg_id(user_id)
-    if not user:
         return
  
     success, message = await self.app.store.games.sell_shares(
@@ -397,23 +398,24 @@ async def handle_end_turn(self: "BotManager", chat_id: int, user_id: int):
         await self.app.store.tg_api.send_message(chat_id, "❌ Вы не участвуете в этой игре.")
         return
 
-    if self.has_ended_turn(chat_id, user_id):
+    user = await self.app.store.users.get_by_tg_id(user_id)
+    if not user:
+        return
+
+    if await self.has_ended_turn(game.game_id, user.user_id):
         await self.app.store.tg_api.send_message(chat_id, "Вы уже завершили ход.")
         return
 
-    self.mark_turn_ended(chat_id, user_id)
-    self.clear_pending_action(chat_id, user_id)
+    await self.mark_turn_ended(game.game_id, user.user_id)
+    await self.clear_pending_action(game.game_id, user.user_id)
 
-    user = await self.app.store.users.get_by_tg_id(user_id)
-    name = user.name if user else "Игрок"
+    name = user.name
     players_count = len(game.game_user)
-    ended_count = len(self.ended_turns.get(chat_id, set()))
+    ended_count = await self.app.store.games.get_ended_turns_count(game.game_id)  # ← было len(self.ended_turns...)
 
     await self.app.store.tg_api.send_message(
-        chat_id,
-        f"✅ {name} завершил ход. ({ended_count}/{players_count})"
+        chat_id, f"✅ {name} завершил ход. ({ended_count}/{players_count})"
     )
-
     if ended_count >= players_count:
         await self.app.store.games.finish_round(chat_id, game.game_id)
 
@@ -437,7 +439,7 @@ async def handle_end_game_request(self: "BotManager", chat_id: int, user_id: int
         chat_id, "❓ Вы уверены, что хотите завершить игру?", keyboard
     )
     if message_id:
-        self.confirm_message_ids[chat_id] = message_id
+        await self.set_confirm_message_id(game.game_id, message_id)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Inline: Подтверждение / отмена завершения игры
@@ -448,18 +450,13 @@ async def handle_end_game_callback(
     self: "BotManager", chat_id: int, user_id: int, callback: EndGameCallback
 ):  
     # Удаляем сообщения о подтверждении
-    confirm_id = self.confirm_message_ids.pop(chat_id, None)
+    confirm_id = await self.get_confirm_message_id(callback.game_id)
     if confirm_id:
         await self.app.store.tg_api.delete_message(chat_id, confirm_id)
-    
-    game = await self.app.store.games.get_active_game(chat_id)
-    if not game:
-        await self.app.store.tg_api.send_message(chat_id, "Игра не найдена.")
-        return
+        await self.set_confirm_message_id(callback.game_id, None)
 
-    self.reset_turns(chat_id)
-    self._pending_actions.pop(chat_id, None) 
-      
+    await self.reset_turns(callback.game_id)
+    await self.app.store.games.clear_all_pending_actions(callback.game_id)
     await self.app.store.games.finish_game(callback.game_id)
 
 @router.callback(ContinueGameCallback)
@@ -467,8 +464,9 @@ async def handle_continue_game_callback(
     self: "BotManager", chat_id: int, user_id: int, callback: ContinueGameCallback
 ):
     # Удаляем сообщение о подтверждении
-    confirm_id = self.confirm_message_ids.pop(chat_id, None)
+    confirm_id = await self.get_confirm_message_id(callback.game_id)
     if confirm_id:
         await self.app.store.tg_api.delete_message(chat_id, confirm_id)
+        await self.set_confirm_message_id(callback.game_id, None)
     
     await self.app.store.tg_api.send_message(chat_id, "▶️ Игра продолжается.")

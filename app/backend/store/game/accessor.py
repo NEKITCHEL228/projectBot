@@ -10,9 +10,13 @@ from app.backend.game.models import (
     CompanySharesModel,
     UserCompanyShareModel,
     UserBalanceModel,
+    GameStateModel,
+    PlayerTurnStateModel
 )
+from sqlalchemy import func, update
 from app.backend.store.tg_api.game_builders import get_initial_companies, build_round_start_message, get_random_events, build_game_over_message, MAIN_MENU_BUTTONS
 from app.backend.user.models import UserModel
+from app.backend.admin.models import AdminModel
 
 if TYPE_CHECKING:
     from app.backend.web.app import Application
@@ -52,6 +56,8 @@ class GameAccessor(BaseAccessor):
         )
         async with self.app.database.session() as session:
             session.add(game)
+            await session.flush()
+            session.add(GameStateModel(game_id=game.game_id))
             await session.commit()
             await session.refresh(game)
         return game
@@ -122,6 +128,36 @@ class GameAccessor(BaseAccessor):
         text = build_game_over_message(round_num, players_balances)
         await self.app.store.tg_api.send_keyboard(chat_id, text, MAIN_MENU_BUTTONS)
 
+    # ── GameState: lobby_message_id ───────────────────────────────────────────────
+
+    async def get_lobby_message_id(self, game_id: int) -> int | None:
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(GameStateModel.lobby_message_id).where(GameStateModel.game_id == game_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def set_lobby_message_id(self, game_id: int, message_id: int | None) -> None:
+        async with self.app.database.session() as session:
+            state = await self._get_or_create_game_state(session, game_id)
+            state.lobby_message_id = message_id
+            await session.commit()
+            
+    # ── GameState: confirm_message_id ────────────────────────────────────────────
+
+    async def get_confirm_message_id(self, game_id: int) -> int | None:
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(GameStateModel.confirm_message_id).where(GameStateModel.game_id == game_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def set_confirm_message_id(self, game_id: int, message_id: int | None) -> None:
+        async with self.app.database.session() as session:
+            state = await self._get_or_create_game_state(session, game_id)
+            state.confirm_message_id = message_id
+            await session.commit()
+
     # ── Игроки ────────────────────────────────────────────────────────────────
 
     async def add_player_to_game(self, game_id: int, user_id: int) -> bool:
@@ -137,6 +173,7 @@ class GameAccessor(BaseAccessor):
             session.add(game_user)
             await session.flush()  # получаем game_user_id до commit
             session.add(UserBalanceModel(game_user_id=game_user.game_user_id))
+            session.add(PlayerTurnStateModel(game_user_id=game_user.game_user_id))
             await session.commit()
         return True
 
@@ -159,117 +196,123 @@ class GameAccessor(BaseAccessor):
         async with self.app.database.session() as session:
             result = await session.execute(query)
             return [gu.user for gu in result.scalars().all()]
+        
+    # ── PlayerTurnState ───────────────────────────────────────────────────────────
 
-    # ── Вспомогательный метод: получить GameUserModel с балансом ─────────────
-
-    async def _get_game_user_with_balance(
-        self, session, game_id: int, user_id: int
-    ) -> GameUserModel | None:
-        query = (
-            select(GameUserModel)
-            .where(
-                GameUserModel.game_id == game_id,
-                GameUserModel.user_id == user_id,
-            )
-            .options(selectinload(GameUserModel.balance))
-        )
-        result = await session.execute(query)
-        return result.scalar_one_or_none()
-    
-    # ── Вспомогательный метод: Пересчитывает company_share_balance и full_balance для всех игроков ─────────────
-    
-    async def _recalculate_balances(self, session, game_id: int) -> None:
-        # Загружаем актуальные цены
-        companies_result = await session.execute(
-            select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
-        )
-        price_map = {
-            c.company_share_id: float(c.company_share_price)
-            for c in companies_result.scalars().all()
-        }
-
-        # Загружаем всех игроков с балансами и акциями
-        players_q = (
-            select(GameUserModel)
-            .where(GameUserModel.game_id == game_id)
-            .options(
-                selectinload(GameUserModel.balance),
-                selectinload(GameUserModel.company_shares).selectinload(
-                    UserCompanyShareModel.company_share
-                ),
-            )
-        )
-        result = await session.execute(players_q)
-        game_users = result.scalars().all()
-
-        for gu in game_users:
-            if not gu.balance:
-                continue
-
-            # Считаем стоимость всех акций игрока по новым ценам
-            shares_value = sum(
-                s.company_share_count * price_map.get(s.company_share_id, 0.0)
-                for s in gu.company_shares
-            )
-
-            gu.balance.company_share_balance = shares_value
-            gu.balance.full_balance = float(gu.balance.pure_balance) + shares_value
-                    
-    # ── Вспомогательный метод: Вывод сообщения о раунде ─────────────
-    
-    async def print_round_message(self, game_id: int, events: list[dict] | None = None) -> None:
-        """
-        Выводит информацию о текущем раунде.
-        events=None означает первый раунд — цены показываются без изменений.
-        """
+    async def mark_turn_ended(self, game_id: int, user_db_id: int) -> None:
         async with self.app.database.session() as session:
-            game_q = select(GameModel).where(GameModel.game_id == game_id)
-            result = await session.execute(game_q)
-            game = result.scalar_one_or_none()
-            if not game:
+            game_user_id = await self._get_game_user_id(session, game_id, user_db_id)
+            if not game_user_id:
                 return
-
-            players_q = (
-                select(GameUserModel)
-                .where(GameUserModel.game_id == game_id)
-                .options(
-                    selectinload(GameUserModel.user),
-                    selectinload(GameUserModel.balance),
+            result = await session.execute(
+                select(PlayerTurnStateModel).where(
+                    PlayerTurnStateModel.game_user_id == game_user_id
                 )
             )
-            result = await session.execute(players_q)
-            game_users = result.scalars().all()
+            state = result.scalar_one_or_none()
+            if state:
+                state.turn_ended = True
+                await session.commit()
 
-            players_balances = [
-                {
-                    "name": gu.user.name,
-                    "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
-                }
-                for gu in game_users
-            ]
-
-            companies_result = await session.execute(
-                select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+    async def has_ended_turn(self, game_id: int, user_db_id: int) -> bool:
+        async with self.app.database.session() as session:
+            game_user_id = await self._get_game_user_id(session, game_id, user_db_id)
+            if not game_user_id:
+                return False
+            result = await session.execute(
+                select(PlayerTurnStateModel.turn_ended).where(
+                    PlayerTurnStateModel.game_user_id == game_user_id
+                )
             )
-            companies_data = [
-                {"name": c.company_share_name, "price": float(c.company_share_price)}
-                for c in companies_result.scalars().all()
-            ]
+            val = result.scalar_one_or_none()
+            return bool(val)
 
-        # Если события не переданы — первый раунд, цены без изменений
-        round_events = events if events is not None else [
-            {
-                "name": c["name"],
-                "old_price": c["price"],
-                "new_price": c["price"],
-                "direction": "none",
-                "percent": 0,
-            }
-            for c in companies_data
-        ]
+    async def get_ended_turns_count(self, game_id: int) -> int:
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(func.count()).select_from(PlayerTurnStateModel)
+                .join(GameUserModel,
+                    PlayerTurnStateModel.game_user_id == GameUserModel.game_user_id)
+                .where(
+                    GameUserModel.game_id == game_id,
+                    PlayerTurnStateModel.turn_ended == True,
+                )
+            )
+            return result.scalar_one()
 
-        text = build_round_start_message(game.game_trading_session_round, players_balances, round_events)
-        await self.app.store.tg_api.send_message(game.chat_id, text)
+    async def reset_turns(self, game_id: int) -> None:
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(PlayerTurnStateModel)
+                .join(GameUserModel,
+                    PlayerTurnStateModel.game_user_id == GameUserModel.game_user_id)
+                .where(GameUserModel.game_id == game_id)
+            )
+            for state in result.scalars().all():
+                state.turn_ended = False
+                state.pending_action = None
+            await session.commit()
+
+    async def set_pending_action(self, game_id: int, user_db_id: int, action: str | None) -> None:
+        async with self.app.database.session() as session:
+            game_user_id = await self._get_game_user_id(session, game_id, user_db_id)
+            if not game_user_id:
+                return
+            result = await session.execute(
+                select(PlayerTurnStateModel).where(
+                    PlayerTurnStateModel.game_user_id == game_user_id
+                )
+            )
+            state = result.scalar_one_or_none()
+            if state:
+                state.pending_action = action
+                await session.commit()
+
+    async def get_pending_action(self, game_id: int, user_db_id: int) -> str | None:
+        async with self.app.database.session() as session:
+            game_user_id = await self._get_game_user_id(session, game_id, user_db_id)
+            if not game_user_id:
+                return None
+            result = await session.execute(
+                select(PlayerTurnStateModel.pending_action).where(
+                    PlayerTurnStateModel.game_user_id == game_user_id
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def clear_pending_action(self, game_id: int, user_db_id: int) -> None:
+        await self.set_pending_action(game_id, user_db_id, None)
+
+    async def clear_all_pending_actions(self, game_id: int) -> None:
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(PlayerTurnStateModel)
+                .join(GameUserModel,
+                    PlayerTurnStateModel.game_user_id == GameUserModel.game_user_id)
+                .where(GameUserModel.game_id == game_id)
+            )
+            for state in result.scalars().all():
+                state.pending_action = None
+            await session.commit()
+
+    async def get_pending_action_for_chat(self, chat_id: int, tg_id: int) -> str | None:
+        """Для роутера: поиск pending action по chat_id + tg_id без знания game_id."""
+        async with self.app.database.session() as session:
+            result = await session.execute(
+                select(PlayerTurnStateModel.pending_action)
+                .join(GameUserModel,
+                    PlayerTurnStateModel.game_user_id == GameUserModel.game_user_id)
+                .join(GameModel,
+                    GameUserModel.game_id == GameModel.game_id)
+                .join(UserModel,
+                    GameUserModel.user_id == UserModel.user_id)
+                .where(
+                    GameModel.chat_id == chat_id,
+                    GameModel.game_status == GameStatusEnum.IN_PROGRESS,
+                    UserModel.tg_id == tg_id,
+                )
+            )
+            return result.scalar_one_or_none()
 
     # ── Акции / компании ──────────────────────────────────────────────────────
 
@@ -437,9 +480,7 @@ class GameAccessor(BaseAccessor):
     # ── Раунды ────────────────────────────────────────────────────────────────
 
     async def finish_round(self, chat_id: int, game_id: int) -> None:
-        manager = self.app.store.bots_manager
-        manager.reset_turns(chat_id)
-
+        await self.reset_turns(game_id)
         new_round = 1
 
         # Увеличиваем раунд
@@ -504,3 +545,140 @@ class GameAccessor(BaseAccessor):
 
         text = build_round_start_message(new_round, players_balances, events)
         await self.app.store.tg_api.send_message(chat_id, text)
+        
+        
+        # ── Вспомогательный метод: получить GameUserModel с балансом ─────────────
+
+    async def _get_game_user_with_balance(
+        self, session, game_id: int, user_id: int
+    ) -> GameUserModel | None:
+        query = (
+            select(GameUserModel)
+            .where(
+                GameUserModel.game_id == game_id,
+                GameUserModel.user_id == user_id,
+            )
+            .options(selectinload(GameUserModel.balance))
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+    
+    # ── Вспомогательный метод: Пересчитывает company_share_balance и full_balance для всех игроков ─────────────
+    
+    async def _recalculate_balances(self, session, game_id: int) -> None:
+        # Загружаем актуальные цены
+        companies_result = await session.execute(
+            select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+        )
+        price_map = {
+            c.company_share_id: float(c.company_share_price)
+            for c in companies_result.scalars().all()
+        }
+
+        # Загружаем всех игроков с балансами и акциями
+        players_q = (
+            select(GameUserModel)
+            .where(GameUserModel.game_id == game_id)
+            .options(
+                selectinload(GameUserModel.balance),
+                selectinload(GameUserModel.company_shares).selectinload(
+                    UserCompanyShareModel.company_share
+                ),
+            )
+        )
+        result = await session.execute(players_q)
+        game_users = result.scalars().all()
+
+        for gu in game_users:
+            if not gu.balance:
+                continue
+
+            # Считаем стоимость всех акций игрока по новым ценам
+            shares_value = sum(
+                s.company_share_count * price_map.get(s.company_share_id, 0.0)
+                for s in gu.company_shares
+            )
+
+            gu.balance.company_share_balance = shares_value
+            gu.balance.full_balance = float(gu.balance.pure_balance) + shares_value
+                    
+    # ── Вспомогательный метод: Вывод сообщения о раунде ─────────────
+    
+    async def print_round_message(self, game_id: int, events: list[dict] | None = None) -> None:
+        """
+        Выводит информацию о текущем раунде.
+        events=None означает первый раунд — цены показываются без изменений.
+        """
+        async with self.app.database.session() as session:
+            game_q = select(GameModel).where(GameModel.game_id == game_id)
+            result = await session.execute(game_q)
+            game = result.scalar_one_or_none()
+            if not game:
+                return
+
+            players_q = (
+                select(GameUserModel)
+                .where(GameUserModel.game_id == game_id)
+                .options(
+                    selectinload(GameUserModel.user),
+                    selectinload(GameUserModel.balance),
+                )
+            )
+            result = await session.execute(players_q)
+            game_users = result.scalars().all()
+
+            players_balances = [
+                {
+                    "name": gu.user.name,
+                    "balance": float(gu.balance.full_balance) if gu.balance else 0.0,
+                }
+                for gu in game_users
+            ]
+
+            companies_result = await session.execute(
+                select(CompanySharesModel).where(CompanySharesModel.game_id == game_id)
+            )
+            companies_data = [
+                {"name": c.company_share_name, "price": float(c.company_share_price)}
+                for c in companies_result.scalars().all()
+            ]
+
+        # Если события не переданы — первый раунд, цены без изменений
+        round_events = events if events is not None else [
+            {
+                "name": c["name"],
+                "old_price": c["price"],
+                "new_price": c["price"],
+                "direction": "none",
+                "percent": 0,
+            }
+            for c in companies_data
+        ]
+
+        text = build_round_start_message(game.game_trading_session_round, players_balances, round_events)
+        await self.app.store.tg_api.send_message(game.chat_id, text)
+        
+    # ── Вспомогательный: GameState ────────────────────────────────────────────────
+
+    async def _get_or_create_game_state(self, session, game_id: int) -> GameStateModel:
+        result = await session.execute(
+            select(GameStateModel).where(GameStateModel.game_id == game_id)
+        )
+        state = result.scalar_one_or_none()
+        if not state:
+            state = GameStateModel(game_id=game_id)
+            session.add(state)
+            await session.flush()
+        return state
+    
+    
+    # ── Вспомогательный: game_user_id по game_id + user_db_id ────────────────────
+
+    async def _get_game_user_id(self, session, game_id: int, user_db_id: int) -> int | None:
+        result = await session.execute(
+            select(GameUserModel.game_user_id).where(
+                GameUserModel.game_id == game_id,
+                GameUserModel.user_id == user_db_id,
+            )
+        )
+        return result.scalar_one_or_none()

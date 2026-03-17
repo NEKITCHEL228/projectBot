@@ -1,13 +1,13 @@
+session:
+  key: YOUR_KEY
 bot:
-  token: "fake_token_for_tests"
-
+  token: YOUR_TOKEN
+admin: 
+  tg_id: YOUR_TG_ID
+  password: YOUR_ADMIN_PASS (sha256).hexdigest()
 database:
   host: localhost
-  port: 5433          # ← порт тестовой БД
-  user: bot_user
-  password: bot_password
-  name: bot_test_database
-
-admin:
-  tg_id: 1111111111
-  password: testpassword
+  port: 5432
+  user: YOUR_USER
+  password: YOUR_PASSWORD
+  name: YOUR_DB_NAME

@@ -15,43 +15,40 @@ class BotManager:
         self.router = router
         self.logger = getLogger("BotManager")
 
-        # chat_id -> lobby inline message_id
-        self.lobby_message_ids: dict[int, int] = {}
+    # ── GameState: lobby message ──────────────────────────────────────────────
 
-        # chat_id -> game info inline message_id
-        self.game_info_message_ids: dict[int, int] = {}
+    async def get_lobby_message_id(self, game_id: int) -> int | None:
+        return await self.app.store.games.get_lobby_message_id(game_id)
 
-        # Pending input: {chat_id: {user_id: "buy" | "sell"}}
-        self._pending_actions: dict[int, dict[int, str]] = {}
+    async def set_lobby_message_id(self, game_id: int, message_id: int | None) -> None:
+        await self.app.store.games.set_lobby_message_id(game_id, message_id)
 
-        # Игроки, завершившие ход в текущем раунде: {chat_id: {user_id}}
-        self.ended_turns: dict[int, set[int]] = {}
-        
-        # chat_id -> message_id сообщения с подтверждением (конец игры и т.п.)
-        self.confirm_message_ids: dict[int, int] = {}
+    # ── GameState: confirm message ────────────────────────────────────────────
 
-    # ── Pending actions API ───────────────────────────────────────────────────
+    async def get_confirm_message_id(self, game_id: int) -> int | None:
+        return await self.app.store.games.get_confirm_message_id(game_id)
 
-    def set_pending_action(self, chat_id: int, user_id: int, action: str) -> None:
-        self._pending_actions.setdefault(chat_id, {})[user_id] = action
+    async def set_confirm_message_id(self, game_id: int, message_id: int | None) -> None:
+        await self.app.store.games.set_confirm_message_id(game_id, message_id)
 
-    def get_pending_action(self, chat_id: int, user_id: int) -> str | None:
-        return self._pending_actions.get(chat_id, {}).get(user_id)
+    # ── PlayerTurnState: pending actions ──────────────────────────────────────
 
-    def clear_pending_action(self, chat_id: int, user_id: int) -> None:
-        chat_pending = self._pending_actions.get(chat_id, {})
-        chat_pending.pop(user_id, None)
+    async def set_pending_action(self, game_id: int, user_db_id: int, action: str) -> None:
+        await self.app.store.games.set_pending_action(game_id, user_db_id, action)
 
-    # ── Ended turns API ───────────────────────────────────────────────────────
+    async def clear_pending_action(self, game_id: int, user_db_id: int) -> None:
+        await self.app.store.games.clear_pending_action(game_id, user_db_id)
 
-    def mark_turn_ended(self, chat_id: int, user_id: int) -> None:
-        self.ended_turns.setdefault(chat_id, set()).add(user_id)
+    # ── PlayerTurnState: ходы ────────────────────────────────────────────────
 
-    def has_ended_turn(self, chat_id: int, user_id: int) -> bool:
-        return user_id in self.ended_turns.get(chat_id, set())
+    async def mark_turn_ended(self, game_id: int, user_db_id: int) -> None:
+        await self.app.store.games.mark_turn_ended(game_id, user_db_id)
 
-    def reset_turns(self, chat_id: int) -> None:
-        self.ended_turns.pop(chat_id, None)
+    async def has_ended_turn(self, game_id: int, user_db_id: int) -> bool:
+        return await self.app.store.games.has_ended_turn(game_id, user_db_id)
+
+    async def reset_turns(self, game_id: int) -> None:
+        await self.app.store.games.reset_turns(game_id)
 
     # ── Обработка обновлений ──────────────────────────────────────────────────
 

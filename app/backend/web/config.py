@@ -27,10 +27,15 @@ class DatabaseConfig:
     
     
 @dataclass
+class SessionConfig:
+    key: str
+    
+@dataclass
 class Config:
     bot: BotConfig
     database: DatabaseConfig
     admin: AdminConfig
+    session: SessionConfig
     
 
 def setup_config(app: "Application", config_path: str):
@@ -45,4 +50,5 @@ def setup_config(app: "Application", config_path: str):
         ),
         database=DatabaseConfig(**config_dict["database"]),
         admin=AdminConfig(tg_id=config_dict["admin"]["tg_id"], password=config_dict["admin"]["password"]),
+        session=SessionConfig(key=config_dict["session"]["key"])
     )
